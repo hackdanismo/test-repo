@@ -1,0 +1,59 @@
+name: Publish ZIP to GitHub Pages
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ZIP
+        run: |
+          mkdir -p dist
+          # Change this to your actual build/export directory
+          if [ -d export ]; then
+            (cd export && zip -r ../dist/my-bundle.zip .)
+          else
+            zip -r dist/my-bundle.zip README.md
+          fi
+
+      - name: Create manifest.json
+        run: |
+          UPDATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          VERSION="${GITHUB_SHA::7}"
+          cat > dist/manifest.json <<EOF
+          {
+            "url": "${BASE_URL}/my-bundle.zip",
+            "version": "${VERSION}",
+            "updated": "${UPDATED}"
+          }
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
